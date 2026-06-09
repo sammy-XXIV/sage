@@ -859,43 +859,26 @@ function buildPath(from, to){
   return [TOKENS[from].address, TOKENS.USDG.address, TOKENS[to].address]; // e.g. TSLA→USDG→NFLX
 }
 
-// ── Prices: Yahoo Finance + DEX on-chain reserve price ────────
+// ── Prices: directly on-chain via SageAMM Router ─────────────
 const rpc = new ethers.JsonRpcProvider(RPC,{chainId:CHAIN,name:'rh'});
 
-async function getDexPrice(sym){
-  try{
-    const pair=new ethers.Contract(PAIRS[sym],PAIR_ABI,rpc);
-    const [r0,r1]=await pair.getReserves();
-    const token0=await pair.token0();
-    const isUsdgToken0=token0.toLowerCase()===TOKENS.USDG.address.toLowerCase();
-    const usdgRes=parseFloat(ethers.formatUnits(isUsdgToken0?r0:r1, 6));
-    const tokRes =parseFloat(ethers.formatUnits(isUsdgToken0?r1:r0, 18));
-    return tokRes>0 ? usdgRes/tokRes : null;
-  }catch{ return null; }
-}
-
 async function fetchPrices(){
-  // Set icons in price panel
   for(const sym of['TSLA','AMZN','NFLX','PLTR','AMD']){
     const imgEl=document.getElementById(`pximg-${sym}`);
     if(imgEl){ imgEl.src=TOKENS[sym].logo; imgEl.onerror=()=>tokenLogoFallback(imgEl,sym); }
   }
-
-  // Prices via local proxy (avoids CORS)
   try{
     const r=await fetch('https://sage-rh-backend-production.up.railway.app/prices');
     const data=await r.json();
     for(const[sym,d] of Object.entries(data)){
-      if(!d||!d.price) continue;
-      const chg=d.prev?((d.price-d.prev)/d.prev*100):0;
+      if(!d) continue;
       const el=document.getElementById(`px-${sym}`);
       if(!el) continue;
       el.querySelector('.px-val').textContent=`$${d.price.toFixed(2)}`;
+      const chg=parseFloat(d.change)||0;
       const c=el.querySelector('.px-chg');
       c.textContent=(chg>=0?'+':'')+chg.toFixed(2)+'%';
       c.className='px-chg '+(chg>=0?'pos':'neg');
-      const dex=await getDexPrice(sym);
-      if(dex){ const diff=((dex-d.price)/d.price*100); el.title=`DEX: $${dex.toFixed(2)} (${diff>=0?'+':''}${diff.toFixed(1)}% vs market)`; }
     }
   }catch(e){ console.warn('Price fetch failed',e); }
 }
