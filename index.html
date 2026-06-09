@@ -736,17 +736,40 @@ async function fetchQuote(v){
   try{
     document.getElementById('amtOut').value='…';
     const p=provider||new ethers.JsonRpcProvider(RPC,{chainId:CHAIN,name:'rh'});
-    const r=new ethers.Contract(ROUTER,ROUTER_ABI,p);
     const tf=TOKENS[fromTok], tt=TOKENS[toTok];
-    const path=buildPath(fromTok,toTok);
-    const amts=await r.getAmountsOut(ethers.parseUnits(String(v),tf.decimals),path);
-    const out=parseFloat(ethers.formatUnits(amts[amts.length-1],tt.decimals));
-    document.getElementById('amtOut').value=out.toFixed(6);
-    document.getElementById('rRate').textContent=`1 ${fromTok} = ${(out/v).toFixed(6)} ${toTok}`;
-    document.getElementById('rMin').textContent=`${(out*.99).toFixed(6)} ${toTok}`;
+
+    async function pairReserves(stockSym){
+      const pair=new ethers.Contract(PAIRS[stockSym],PAIR_ABI,p);
+      const [[r0,r1],token0]=await Promise.all([pair.getReserves(),pair.token0()]);
+      const isUsdg0=token0.toLowerCase()===TOKENS.USDG.address.toLowerCase();
+      return{rUSDG:isUsdg0?r0:r1, rSTOCK:isUsdg0?r1:r0};
+    }
+    function ammOut(amtIn,rIn,rOut){
+      const fee=amtIn*997n;
+      return(fee*rOut)/(rIn*1000n+fee);
+    }
+
+    const amtInRaw=ethers.parseUnits(String(v),tf.decimals);
+    let out;
+    if(fromTok==='USDG'){
+      const{rUSDG,rSTOCK}=await pairReserves(toTok);
+      out=ammOut(amtInRaw,rUSDG,rSTOCK);
+    }else if(toTok==='USDG'){
+      const{rUSDG,rSTOCK}=await pairReserves(fromTok);
+      out=ammOut(amtInRaw,rSTOCK,rUSDG);
+    }else{
+      const a=await pairReserves(fromTok);
+      const mid=ammOut(amtInRaw,a.rSTOCK,a.rUSDG);
+      const b=await pairReserves(toTok);
+      out=ammOut(mid,b.rUSDG,b.rSTOCK);
+    }
+
+    const outFloat=parseFloat(ethers.formatUnits(out,tt.decimals));
+    document.getElementById('amtOut').value=outFloat.toFixed(6);
+    document.getElementById('rRate').textContent=`1 ${fromTok} = ${(outFloat/v).toFixed(6)} ${toTok}`;
+    document.getElementById('rMin').textContent=`${(outFloat*.99).toFixed(6)} ${toTok}`;
     document.getElementById('rImpact').textContent='< 0.5%';
-    const routeLabel=path.length===3?`${fromTok} → USDG → ${toTok}`:`${fromTok} → ${toTok}`;
-    document.getElementById('rRoute').textContent=routeLabel;
+    document.getElementById('rRoute').textContent=fromTok!=='USDG'&&toTok!=='USDG'?`${fromTok} → USDG → ${toTok}`:`${fromTok} → ${toTok}`;
     document.getElementById('route').classList.add('on');
     updateBtn();
   }catch(e){
