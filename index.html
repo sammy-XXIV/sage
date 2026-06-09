@@ -883,7 +883,7 @@ async function fetchPrices(){
 
   // Prices via local proxy (avoids CORS)
   try{
-    const r=await fetch('/prices');
+    const r=await fetch('https://sage-rh-backend-production.up.railway.app/prices');
     const data=await r.json();
     for(const[sym,d] of Object.entries(data)){
       if(!d||!d.price) continue;
