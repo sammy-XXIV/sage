@@ -768,7 +768,23 @@ async function fetchQuote(v){
     document.getElementById('amtOut').value=outFloat.toFixed(6);
     document.getElementById('rRate').textContent=`1 ${fromTok} = ${(outFloat/v).toFixed(6)} ${toTok}`;
     document.getElementById('rMin').textContent=`${(outFloat*.99).toFixed(6)} ${toTok}`;
-    document.getElementById('rImpact').textContent='< 0.5%';
+
+    // Real price impact: compare effective rate to spot price from reserves
+    let impact=0;
+    if(fromTok==='USDG'){
+      const{rUSDG,rSTOCK}=await pairReserves(toTok);
+      const spot=parseFloat(ethers.formatUnits(rUSDG,6))/parseFloat(ethers.formatUnits(rSTOCK,18));
+      const effective=v/outFloat;
+      impact=Math.abs((effective-spot)/spot*100);
+    } else if(toTok==='USDG'){
+      const{rUSDG,rSTOCK}=await pairReserves(fromTok);
+      const spot=parseFloat(ethers.formatUnits(rUSDG,6))/parseFloat(ethers.formatUnits(rSTOCK,18));
+      const effective=outFloat/v;
+      impact=Math.abs((spot-effective)/spot*100);
+    }
+    const impactEl=document.getElementById('rImpact');
+    impactEl.textContent=`${impact.toFixed(2)}%`;
+    impactEl.style.color=impact<1?'var(--green)':impact<5?'#f5c542':'var(--red)';
     document.getElementById('rRoute').textContent=fromTok!=='USDG'&&toTok!=='USDG'?`${fromTok} → USDG → ${toTok}`:`${fromTok} → ${toTok}`;
     document.getElementById('route').classList.add('on');
     updateBtn();
