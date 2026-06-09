@@ -140,6 +140,9 @@ main{flex:1;display:flex;align-items:center;justify-content:center;padding:40px 
   color:var(--muted);font-size:15px;transition:all .2s;
 }
 .icon-btn:hover{background:var(--glass2);color:var(--text);border-color:var(--glass-border2);}
+.slip-opt{padding:5px 10px;border-radius:8px;border:1px solid var(--glass-border);background:none;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;}
+.slip-opt:hover{border-color:var(--lime);color:var(--lime);}
+.slip-opt.active{background:rgba(200,241,53,.12);border-color:var(--lime);color:var(--lime);}
 
 /* ─── TOKEN BOX ───────────────────────────────── */
 .tbox{
@@ -437,7 +440,18 @@ footer a:hover{text-decoration:underline;}
     <div class="card">
       <div class="card-head">
         <span class="card-title">Swap</span>
-        <div class="icon-btn" title="Settings">⚙</div>
+        <div class="icon-btn" title="Settings" onclick="toggleSlippage()">⚙</div>
+      </div>
+      <div id="slippagePanel" style="display:none;background:rgba(255,255,255,.03);border:1px solid var(--glass-border);border-radius:14px;padding:12px 14px;margin-bottom:12px;">
+        <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Slippage Tolerance</div>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <button class="slip-opt" onclick="setSlippage(0.5)">0.5%</button>
+          <button class="slip-opt active" onclick="setSlippage(1)">1%</button>
+          <button class="slip-opt" onclick="setSlippage(2)">2%</button>
+          <button class="slip-opt" onclick="setSlippage(3)">3%</button>
+          <input id="slipCustom" type="number" min="0.1" max="50" step="0.1" placeholder="Custom" style="width:70px;background:rgba(255,255,255,.05);border:1px solid var(--glass-border);border-radius:8px;color:#fff;font-size:12px;padding:5px 8px;outline:none;" oninput="setSlippage(parseFloat(this.value)||1)"/>
+          <span style="font-size:12px;color:var(--muted);">%</span>
+        </div>
       </div>
 
       <!-- From -->
@@ -483,7 +497,7 @@ footer a:hover{text-decoration:underline;}
       <div class="route" id="route">
         <div class="route-row"><span class="route-k">Rate</span><span class="route-v" id="rRate">—</span></div>
         <div class="route-row"><span class="route-k">Price impact</span><span class="route-v ok" id="rImpact">—</span></div>
-        <div class="route-row"><span class="route-k">Min received (1% slip)</span><span class="route-v" id="rMin">—</span></div>
+        <div class="route-row"><span class="route-k" id="rMinLabel">Min received (1% slip)</span><span class="route-v" id="rMin">—</span></div>
         <div class="route-row"><span class="route-k">Route</span><span class="route-v" id="rRoute">—</span></div>
       </div>
 
@@ -590,7 +604,16 @@ const ERC20_ABI=[
 
 // ── State ─────────────────────────────────────────────────────
 let provider=null, signer=null, account=null;
-let fromTok='USDG', toTok='TSLA', modalTarget=null, quoteT=null;
+let fromTok='USDG', toTok='TSLA', modalTarget=null, quoteT=null, slippage=1;
+
+function toggleSlippage(){ const p=document.getElementById('slippagePanel'); p.style.display=p.style.display==='none'?'block':'none'; }
+function setSlippage(v){
+  slippage=Math.max(0.1,Math.min(50,v));
+  document.querySelectorAll('.slip-opt').forEach(b=>b.classList.toggle('active', parseFloat(b.textContent)===slippage));
+  document.getElementById('rMinLabel').textContent=`Min received (${slippage}% slip)`;
+  const out=parseFloat(document.getElementById('amtOut').value);
+  if(out) document.getElementById('rMin').textContent=`${(out*(1-slippage/100)).toFixed(6)} ${toTok}`;
+}
 const eip6963Wallets=[];
 
 // ── EIP-6963 wallet discovery ──────────────────────────────────
@@ -767,7 +790,8 @@ async function fetchQuote(v){
     const outFloat=parseFloat(ethers.formatUnits(out,tt.decimals));
     document.getElementById('amtOut').value=outFloat.toFixed(6);
     document.getElementById('rRate').textContent=`1 ${fromTok} = ${(outFloat/v).toFixed(6)} ${toTok}`;
-    document.getElementById('rMin').textContent=`${(outFloat*.99).toFixed(6)} ${toTok}`;
+    document.getElementById('rMin').textContent=`${(outFloat*(1-slippage/100)).toFixed(6)} ${toTok}`;
+    document.getElementById('rMinLabel').textContent=`Min received (${slippage}% slip)`;
 
     // Real price impact: compare effective rate to spot price from reserves
     let impact=0;
@@ -815,8 +839,8 @@ async function doSwap(){
     const router=new ethers.Contract(ROUTER,ROUTER_ABI,signer);
     const erc20=new ethers.Contract(tf.address,ERC20_ABI,signer);
     const pIn=ethers.parseUnits(String(amtIn),tf.decimals);
-    const dOut=tt.decimals>6?6:tt.decimals;
-    const pMin=ethers.parseUnits((amtOut*.99).toFixed(dOut),tt.decimals);
+    const dOut=Math.min(tt.decimals,6);
+    const pMin=ethers.parseUnits((amtOut*(1-slippage/100)).toFixed(dOut),tt.decimals);
     const allow=await erc20.allowance(account,ROUTER);
     if(allow<pIn){ toast('Approving…','inf'); await(await erc20.approve(ROUTER,pIn)).wait(); }
     toast('Submitting swap…','inf');
