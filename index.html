@@ -704,10 +704,10 @@ async function connectWith(prov){
     const bp=new ethers.BrowserProvider(prov);
     await bp.send('eth_requestAccounts',[]);
     try{
-      await prov.request({method:'wallet_switchEthereumChain',params:[{chainId:'0xB656'}]});
+      await prov.request({method:'wallet_switchEthereumChain',params:[{chainId:'0xB626'}]});
     }catch(e){
       if(e.code===4902) await prov.request({method:'wallet_addEthereumChain',params:[{
-        chainId:'0xB656',chainName:'Robinhood Chain Testnet',
+        chainId:'0xB626',chainName:'Robinhood Chain Testnet',
         rpcUrls:[RPC],nativeCurrency:{name:'Ethereum',symbol:'ETH',decimals:18},
         blockExplorerUrls:[EXP],
       }]});
@@ -973,14 +973,14 @@ function toast(msg,type='inf'){
 async function addChain(){
   if(!window.ethereum) return toast('No wallet detected','err');
   try{
-    await window.ethereum.request({method:'wallet_switchEthereumChain',params:[{chainId:'0xB656'}]});
+    await window.ethereum.request({method:'wallet_switchEthereumChain',params:[{chainId:'0xB626'}]});
     toast('Switched to Robinhood Chain ✓','ok');
     document.getElementById('chainBanner').style.display='none';
   }catch(e){
     if(e.code===4902){
       try{
         await window.ethereum.request({method:'wallet_addEthereumChain',params:[{
-          chainId:'0xB656',
+          chainId:'0xB626',
           chainName:'Robinhood Chain Testnet',
           rpcUrls:['https://rpc.testnet.chain.robinhood.com'],
           nativeCurrency:{name:'Ethereum',symbol:'ETH',decimals:18},
@@ -999,7 +999,7 @@ async function checkChain(){
   try{
     const chainId=await window.ethereum.request({method:'eth_chainId'});
     const banner=document.getElementById('chainBanner');
-    if(chainId!=='0xb656' && chainId!=='0xB656'){
+    if(chainId!=='0xb626' && chainId!=='0xB626'){
       banner.style.display='flex';
     } else {
       banner.style.display='none';
