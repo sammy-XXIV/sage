@@ -642,6 +642,7 @@ function openExplorer(){
 }
 function disconnect(){
   account=null; signer=null; provider=null;
+  localStorage.removeItem('sage_wallet_rdns');
   const btn=document.getElementById('walletBtn');
   btn.textContent='Connect Wallet';
   btn.classList.remove('is-connected');
@@ -715,6 +716,7 @@ async function connectWith(prov){
     provider=new ethers.BrowserProvider(prov);
     signer=await provider.getSigner();
     account=await signer.getAddress();
+    localStorage.setItem('sage_wallet_rdns', prov.info?.rdns||'injected');
     const btn=document.getElementById('walletBtn');
     btn.textContent=account.slice(0,6)+'…'+account.slice(-4);
     btn.classList.add('is-connected');
@@ -1014,6 +1016,34 @@ setInterval(fetchPrices,30000);
 setInterval(fetchTVL,15000);
 checkChain();
 window.ethereum?.on('chainChanged', ()=>{ checkChain(); location.reload(); });
+
+// ── Auto-reconnect on refresh ─────────────────────────────────
+(async()=>{
+  const saved = localStorage.getItem('sage_wallet_rdns');
+  if(!saved) return;
+  await new Promise(r=>setTimeout(r,300)); // wait for EIP-6963 wallets to announce
+  let prov = null;
+  if(eip6963Wallets.length){
+    const w = eip6963Wallets.find(w=>w.info.rdns===saved) || eip6963Wallets[0];
+    prov = w?.provider;
+  } else if(window.ethereum){
+    prov = window.ethereum;
+  }
+  if(!prov) return;
+  try{
+    const accounts = await prov.request({method:'eth_accounts'});
+    if(!accounts?.length){ localStorage.removeItem('sage_wallet_rdns'); return; }
+    provider=new ethers.BrowserProvider(prov);
+    signer=await provider.getSigner();
+    account=await signer.getAddress();
+    const btn=document.getElementById('walletBtn');
+    btn.textContent=account.slice(0,6)+'…'+account.slice(-4);
+    btn.classList.add('is-connected');
+    updateBtn(); refreshBals();
+    prov.on?.('accountsChanged',()=>location.reload());
+    prov.on?.('chainChanged',()=>location.reload());
+  }catch(e){ localStorage.removeItem('sage_wallet_rdns'); }
+})();
 </script>
 </body>
 </html>
