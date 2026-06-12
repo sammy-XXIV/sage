@@ -642,7 +642,7 @@ function openExplorer(){
 }
 function disconnect(){
   account=null; signer=null; provider=null;
-  localStorage.removeItem('sage_wallet_rdns');
+  localStorage.removeItem('sage_connected');
   const btn=document.getElementById('walletBtn');
   btn.textContent='Connect Wallet';
   btn.classList.remove('is-connected');
@@ -716,7 +716,7 @@ async function connectWith(prov){
     provider=new ethers.BrowserProvider(prov);
     signer=await provider.getSigner();
     account=await signer.getAddress();
-    localStorage.setItem('sage_wallet_rdns', prov.info?.rdns||'injected');
+    localStorage.setItem('sage_connected', account);
     const btn=document.getElementById('walletBtn');
     btn.textContent=account.slice(0,6)+'…'+account.slice(-4);
     btn.classList.add('is-connected');
@@ -1019,21 +1019,22 @@ window.ethereum?.on('chainChanged', ()=>{ checkChain(); location.reload(); });
 
 // ── Auto-reconnect on refresh ─────────────────────────────────
 (async()=>{
-  if(!localStorage.getItem('sage_wallet_rdns')) return;
+  if(!localStorage.getItem('sage_connected')) return;
   if(!window.ethereum) return;
   try{
     const accounts = await window.ethereum.request({method:'eth_accounts'});
-    if(!accounts?.length){ localStorage.removeItem('sage_wallet_rdns'); return; }
+    if(!accounts?.length){ localStorage.removeItem('sage_connected'); return; }
     provider = new ethers.BrowserProvider(window.ethereum);
     signer   = await provider.getSigner();
     account  = await signer.getAddress();
+    localStorage.setItem('sage_connected', account);
     const btn = document.getElementById('walletBtn');
     btn.textContent = account.slice(0,6)+'…'+account.slice(-4);
     btn.classList.add('is-connected');
     updateBtn(); refreshBals();
     window.ethereum.on?.('accountsChanged', ()=>location.reload());
     window.ethereum.on?.('chainChanged', ()=>location.reload());
-  } catch(e){ localStorage.removeItem('sage_wallet_rdns'); }
+  } catch(e){ localStorage.removeItem('sage_connected'); }
 })();
 </script>
 </body>
