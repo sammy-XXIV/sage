@@ -13,7 +13,7 @@
   h1 { font-size:20px; margin:0 0 4px; }
   .sub { color:var(--muted); font-size:13px; margin:0 0 18px; line-height:1.5; }
   label { display:block; font-size:13px; color:var(--muted); margin:14px 0 6px; }
-  input[type=password] { width:100%; padding:13px; border-radius:10px; border:1px solid #2e3320; background:#0e1109; color:#fff; font-size:15px; }
+  input[type=password],input[type=text],select { width:100%; padding:13px; border-radius:10px; border:1px solid #2e3320; background:#0e1109; color:#fff; font-size:15px; margin-top:8px; }
   .mono { font-family:ui-monospace,Menlo,monospace; font-size:12px; word-break:break-all; background:#0e1109; border:1px solid #2e3320; border-radius:8px; padding:10px; color:var(--lime); }
   button { width:100%; margin-top:18px; padding:14px; border:none; border-radius:10px; background:var(--lime); color:#11140a; font-weight:700; font-size:15px; cursor:pointer; }
   button:disabled { opacity:.4; cursor:not-allowed; }
@@ -71,14 +71,29 @@
     <button id="unlockBtn">Unlock & show my key</button>
   </div>
 
-  <!-- EXPORTED -->
+  <!-- UNLOCKED: withdraw and/or export -->
   <div id="exported" class="step hidden">
-    <h1 class="ok">🔑 Your private key</h1>
-    <p class="sub">Import this (or the keystore file) into any wallet like MetaMask on Robinhood Chain to control your funds directly.</p>
-    <div class="mono" id="pkOut"></div>
-    <button class="ghost" id="copyPk2">Copy private key</button>
-    <button class="ghost" id="dlExport">Download recovery file</button>
-    <p class="sub">Close this page when done.</p>
+    <h1 class="ok">✅ Wallet unlocked</h1>
+
+    <label>Withdraw — without exposing your key</label>
+    <p class="sub">Send funds to any address. Signed right here in your browser; SAGE covers the gas.</p>
+    <select id="wToken">
+      <option value="USDG">USDG</option><option value="TSLA">TSLA</option><option value="AMZN">AMZN</option>
+      <option value="PLTR">PLTR</option><option value="NFLX">NFLX</option><option value="AMD">AMD</option>
+    </select>
+    <input id="wAmt" type="text" inputmode="decimal" placeholder="Amount" autocomplete="off" />
+    <input id="wTo" type="text" placeholder="Destination address (0x…)" autocomplete="off" />
+    <button id="wBtn">Withdraw</button>
+    <p class="err hidden" id="wErr"></p>
+    <p class="ok hidden" id="wOk"></p>
+
+    <details style="margin-top:22px;">
+      <summary style="cursor:pointer;color:var(--muted);font-size:13px;">Advanced: show / export my private key</summary>
+      <p class="sub" style="margin-top:12px;">Import this (or the keystore file) into MetaMask on Robinhood Chain.</p>
+      <div class="mono" id="pkOut"></div>
+      <button class="ghost" id="copyPk2">Copy private key</button>
+      <button class="ghost" id="dlExport">Download recovery file</button>
+    </details>
   </div>
 
   <!-- DONE (setup complete) -->
@@ -159,6 +174,40 @@ $('unlockBtn').onclick = async () => {
 };
 $('copyPk2').onclick = () => { navigator.clipboard.writeText(generated.pk); $('copyPk2').textContent='Copied ✓'; };
 $('dlExport').onclick = () => dl(generated.keystore);
+
+// ── Withdraw (sign in-browser, no key export) ──
+const RPC = 'https://rpc.testnet.chain.robinhood.com';
+const TOKENS = {
+  USDG:['0x7E955252E15c84f5768B83c41a71F9eba181802F',6],
+  TSLA:['0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E',18],
+  AMZN:['0x5884aD2f920c162CFBbACc88C9C51AA75eC09E02',18],
+  PLTR:['0x1FBE1a0e43594b3455993B5dE5Fd0A7A266298d0',18],
+  NFLX:['0x3b8262A63d25f0477c4DDE23F83cfe22Cb768C93',18],
+  AMD: ['0x71178BAc73cBeb415514eB542a8995b82669778d',18],
+};
+$('wBtn').onclick = async () => {
+  const sym=$('wToken').value, amt=$('wAmt').value.trim(), to=$('wTo').value.trim();
+  $('wErr').classList.add('hidden'); $('wOk').classList.add('hidden');
+  if(!generated?.pk) return fail($('wErr'),'Unlock your wallet first.');
+  if(!ethers.isAddress(to)) return fail($('wErr'),'Enter a valid destination address.');
+  if(!(parseFloat(amt)>0)) return fail($('wErr'),'Enter an amount.');
+  $('wBtn').disabled=true; $('wBtn').textContent='Withdrawing…';
+  try{
+    await fetch(`${BACKEND}/vault/sponsor`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token})}); // gas for owner
+    const net = new ethers.Network('rh',46630);
+    const provider = new ethers.JsonRpcProvider(RPC, net, {staticNetwork:net});
+    const owner = new ethers.Wallet(generated.pk, provider);
+    const [addr,dec] = TOKENS[sym];
+    const acct = new ethers.Contract(account, ['function withdraw(address,address,uint256)'], owner);
+    const tx = await acct.withdraw(addr, to, ethers.parseUnits(amt, dec));
+    await tx.wait();
+    $('wOk').textContent = `✅ Sent ${amt} ${sym} to ${to.slice(0,6)}…${to.slice(-4)}`;
+    $('wOk').classList.remove('hidden'); $('wAmt').value='';
+  }catch(e){
+    fail($('wErr'), e.shortMessage || e.message || 'Withdrawal failed — try again.');
+  }
+  $('wBtn').disabled=false; $('wBtn').textContent='Withdraw';
+};
 </script>
 </body>
 </html>
