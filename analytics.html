@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SAGE DEX — Analytics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root{ --lime:#C8F135; --text:#fff; --muted:rgba(255,255,255,.42); --mid:rgba(255,255,255,.68);
+         --red:#ff5252; --green:#69ff9a; --glass:rgba(255,255,255,.035); --border:rgba(255,255,255,.08); }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{font-family:'Inter',sans-serif;background:#000;color:var(--text);-webkit-font-smoothing:antialiased;min-height:100%;}
+  a{color:inherit;text-decoration:none;}
+  nav{display:flex;align-items:center;gap:18px;padding:18px 22px;border-bottom:1px solid var(--border);position:sticky;top:0;background:rgba(0,0,0,.85);backdrop-filter:blur(12px);z-index:5;}
+  .logo-name{font-size:17px;font-weight:800;letter-spacing:-.4px;}
+  .logo-name em{color:var(--lime);font-style:normal;}
+  .tabs{display:flex;gap:6px;margin-left:8px;}
+  .tab{padding:7px 14px;border-radius:9px;font-size:13px;font-weight:600;color:var(--muted);background:none;border:none;cursor:pointer;}
+  .tab.active{color:#000;background:var(--lime);}
+  .tab:not(.active):hover{color:#fff;}
+  .wrap{max-width:920px;margin:0 auto;padding:30px 20px 80px;}
+  .hero{display:flex;flex-wrap:wrap;gap:16px;margin-bottom:26px;}
+  .stat{flex:1;min-width:160px;background:var(--glass);border:1px solid var(--border);border-radius:16px;padding:20px 22px;}
+  .stat .k{font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;}
+  .stat .v{font-size:30px;font-weight:800;letter-spacing:-.5px;margin-top:8px;}
+  .stat .v.lime{color:var(--lime);}
+  h2{font-size:14px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.6px;margin:8px 0 14px;}
+  table{width:100%;border-collapse:collapse;}
+  thead th{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;text-align:right;padding:10px 14px;font-weight:600;}
+  thead th:first-child{text-align:left;}
+  tbody td{padding:15px 14px;border-top:1px solid var(--border);text-align:right;font-size:14px;font-weight:600;}
+  tbody td:first-child{text-align:left;}
+  .sym{display:flex;align-items:center;gap:10px;}
+  .badge{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--lime),#3d6a00);color:#000;font-weight:900;font-size:11px;display:flex;align-items:center;justify-content:center;}
+  .up{color:var(--green);} .down{color:var(--red);}
+  .muted{color:var(--muted);font-weight:500;}
+  .card{background:var(--glass);border:1px solid var(--border);border-radius:16px;overflow:hidden;}
+  .foot{margin-top:26px;font-size:12px;color:var(--muted);line-height:1.7;}
+  .foot a{color:var(--lime);}
+  .mono{font-family:ui-monospace,Menlo,monospace;font-size:11px;}
+  .upd{font-size:11px;color:var(--muted);margin-top:6px;}
+  .err{color:var(--red);padding:30px;text-align:center;}
+  @media(max-width:560px){ thead th:nth-child(3),tbody td:nth-child(3){display:none;} .stat .v{font-size:24px;} }
+</style>
+</head>
+<body>
+<nav>
+  <span class="logo-name">SAGE <em>DEX</em></span>
+  <div class="tabs">
+    <a class="tab" href="index.html">Swap</a>
+    <button class="tab active">Analytics</button>
+  </div>
+</nav>
+
+<div class="wrap">
+  <div class="hero">
+    <div class="stat"><div class="k">Total Value Locked</div><div class="v lime" id="tvl">—</div></div>
+    <div class="stat"><div class="k">Live Pairs</div><div class="v" id="pairs">—</div></div>
+    <div class="stat"><div class="k">Network</div><div class="v" style="font-size:20px;">Robinhood Chain</div><div class="upd">Arbitrum Orbit · 46630</div></div>
+  </div>
+
+  <h2>Markets</h2>
+  <div class="card">
+    <table>
+      <thead><tr><th>Asset</th><th>DEX price</th><th>24h</th><th>USDG liquidity</th><th>Pool TVL</th></tr></thead>
+      <tbody id="rows"><tr><td colspan="5" class="muted" style="padding:30px;text-align:center;">Loading live on-chain data…</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="upd" id="updated"></div>
+
+  <div class="foot" id="foot"></div>
+</div>
+
+<script>
+const BACKEND = 'https://sage-rh-backend-production.up.railway.app';
+const fmtUsd = n => '$' + Number(n).toLocaleString('en-US',{maximumFractionDigits:2,minimumFractionDigits:2});
+const fmtNum = n => Number(n).toLocaleString('en-US',{maximumFractionDigits:4});
+
+async function load(){
+  try{
+    const d = await (await fetch(`${BACKEND}/analytics`)).json();
+    if(!d.ok) throw new Error('bad');
+    document.getElementById('tvl').textContent = fmtUsd(d.totalTvl);
+    document.getElementById('pairs').textContent = d.pairCount;
+    document.getElementById('rows').innerHTML = d.pairs.map(p=>{
+      if(p.error) return `<tr><td class="sym"><span class="badge">${p.symbol[0]}</span>${p.symbol}</td><td colspan="4" class="muted">unavailable</td></tr>`;
+      const ch = parseFloat(p.change||0);
+      const chCls = ch>=0?'up':'down';
+      const chTxt = (ch>=0?'+':'')+ch.toFixed(2)+'%';
+      return `<tr>
+        <td><div class="sym"><span class="badge">${p.symbol[0]}</span>${p.symbol}</div></td>
+        <td>${fmtUsd(p.price)}</td>
+        <td class="${chCls}">${chTxt}</td>
+        <td class="muted">${fmtUsd(p.usdgReserve)}</td>
+        <td>${fmtUsd(p.tvl)}</td>
+      </tr>`;
+    }).join('');
+    document.getElementById('updated').textContent = 'Updated ' + new Date(d.updatedAt).toLocaleTimeString() + ' · auto-refreshes every 20s';
+    document.getElementById('foot').innerHTML =
+      `Router <span class="mono">${d.router||'—'}</span><br>`+
+      `Oracle <span class="mono">${d.oracle||'—'}</span><br>`+
+      `Prices read live from on-chain pool reserves; 24h change vs market reference. Built on <a href="https://docs.robinhood.com/chain/" target="_blank">Robinhood Chain</a> · Powered by SageDEX — Original AMM`;
+  }catch(e){
+    document.getElementById('rows').innerHTML = `<tr><td colspan="5" class="err">Couldn't load analytics. Retrying…</td></tr>`;
+  }
+}
+load(); setInterval(load, 20000);
+</script>
+</body>
+</html>
