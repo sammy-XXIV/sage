@@ -11,7 +11,7 @@
   body { margin:0; background:var(--bg); color:#f3f5ea; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; display:flex; min-height:100vh; align-items:center; justify-content:center; padding:20px; }
   .card { background:var(--card); border:1px solid #262a1b; border-radius:18px; max-width:440px; width:100%; padding:28px; }
   h1 { font-size:20px; margin:0 0 4px; }
-  .sub { color:var(--muted); font-size:13px; margin:0 0 20px; line-height:1.5; }
+  .sub { color:var(--muted); font-size:13px; margin:0 0 18px; line-height:1.5; }
   label { display:block; font-size:13px; color:var(--muted); margin:14px 0 6px; }
   input[type=password] { width:100%; padding:13px; border-radius:10px; border:1px solid #2e3320; background:#0e1109; color:#fff; font-size:15px; }
   .mono { font-family:ui-monospace,Menlo,monospace; font-size:12px; word-break:break-all; background:#0e1109; border:1px solid #2e3320; border-radius:8px; padding:10px; color:var(--lime); }
@@ -30,47 +30,61 @@
 </head>
 <body>
 <div class="card">
-  <h1>🔐 Secure your SAGE wallet</h1>
-  <p class="sub">Set a password to take <b>full self-custody</b>. Your key is generated here in your browser and encrypted with your password — SAGE never sees either. After this, only you can withdraw your funds.</p>
+  <h1 id="title">🔐 Secure your SAGE wallet</h1>
+  <p class="sub" id="intro">Loading…</p>
 
   <div id="loading" class="step">Checking your link…</div>
-
   <div id="invalid" class="step hidden"><p class="err"></p></div>
 
-  <div id="form" class="step hidden">
+  <!-- SETUP: first time, choose a password -->
+  <div id="setup" class="step hidden">
     <label>Your wallet</label>
-    <div class="mono" id="account"></div>
-
+    <div class="mono" id="accountS"></div>
     <label>Choose a password</label>
     <input id="pw" type="password" placeholder="At least 8 characters" autocomplete="new-password" />
     <label>Confirm password</label>
     <input id="pw2" type="password" placeholder="Re-enter password" autocomplete="new-password" />
     <p class="err hidden" id="pwErr"></p>
-
-    <button id="gen">Generate my key</button>
-
-    <div class="warn">
-      ⚠️ There is no password reset. If you lose this password, you lose the ability to withdraw — exactly like any self-custodial wallet. SAGE can still trade for you, but cannot recover it.
-    </div>
+    <button id="gen">Set password & secure wallet</button>
+    <div class="warn">⚠️ There is no password reset. Lose this password and you lose the ability to withdraw or export — exactly like any self-custodial wallet. SAGE can still trade for you, but cannot recover it.</div>
   </div>
 
+  <!-- BACKUP: after key generated, before ownership transfers -->
   <div id="backup" class="step hidden">
-    <label>✅ Your recovery file is downloading</label>
-    <p class="sub">Keep the downloaded <b>keystore JSON</b> safe — you'll import it (with your password) into any wallet like MetaMask to withdraw. You can also copy your raw private key:</p>
+    <label>✅ Recovery file downloaded</label>
+    <p class="sub">Keep the downloaded keystore file safe. You can also copy your private key now:</p>
     <div class="mono" id="pk"></div>
     <button class="ghost" id="copyPk">Copy private key</button>
     <button class="ghost" id="dl2">Re-download recovery file</button>
-    <div class="row">
-      <input type="checkbox" id="saved" />
-      <label for="saved" style="margin:0;">I have safely saved my recovery file and/or private key. I understand it cannot be recovered.</label>
-    </div>
+    <div class="row"><input type="checkbox" id="saved" /><label for="saved" style="margin:0;">I've safely saved my password and recovery file. I understand they can't be recovered.</label></div>
     <button id="finish" disabled>Take full ownership</button>
     <p class="err hidden" id="finErr"></p>
   </div>
 
+  <!-- UNLOCK: already secured, enter password to export -->
+  <div id="unlock" class="step hidden">
+    <label>Your wallet</label>
+    <div class="mono" id="accountU"></div>
+    <label>Enter your password</label>
+    <input id="upw" type="password" placeholder="Your password" autocomplete="current-password" />
+    <p class="err hidden" id="uErr"></p>
+    <button id="unlockBtn">Unlock & show my key</button>
+  </div>
+
+  <!-- EXPORTED -->
+  <div id="exported" class="step hidden">
+    <h1 class="ok">🔑 Your private key</h1>
+    <p class="sub">Import this (or the keystore file) into any wallet like MetaMask on Robinhood Chain to control your funds directly.</p>
+    <div class="mono" id="pkOut"></div>
+    <button class="ghost" id="copyPk2">Copy private key</button>
+    <button class="ghost" id="dlExport">Download recovery file</button>
+    <p class="sub">Close this page when done.</p>
+  </div>
+
+  <!-- DONE (setup complete) -->
   <div id="done" class="step hidden">
     <h1 class="ok">✅ You're now self-custodial</h1>
-    <p class="sub">Your wallet is fully yours. SAGE can still trade on your behalf, but only your key can withdraw — not even SAGE can move your funds.</p>
+    <p class="sub">Your wallet is fully yours, secured by your password. SAGE can still trade for you, but only you can withdraw or export — not even SAGE. Use the same password anytime to export your key or withdraw.</p>
     <div class="mono" id="txlink"></div>
     <p class="sub">You can close this page and go back to WhatsApp.</p>
   </div>
@@ -80,71 +94,71 @@
 const BACKEND = 'https://sage-rh-backend-production.up.railway.app';
 const token = new URLSearchParams(location.search).get('t');
 let generated = null, account = null;
-
 const $ = id => document.getElementById(id);
-function show(id){ ['loading','invalid','form','backup','done'].forEach(s=>$(s).classList.toggle('hidden', s!==id)); }
+function show(id){ ['loading','invalid','setup','backup','unlock','exported','done'].forEach(s=>$(s).classList.toggle('hidden', s!==id)); }
 function fail(el,msg){ el.textContent=msg; el.classList.remove('hidden'); }
+function dl(json){ const b=new Blob([json],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=`sage-wallet-${account.slice(0,8)}.json`; a.click(); }
 
 (async () => {
-  if (!token) { show('invalid'); $('invalid').querySelector('.err').textContent='Missing link token. Ask SAGE for a new secure link.'; return; }
+  if (!token) return badLink('Missing link token. Ask SAGE for a new secure link.');
   try {
-    const r = await fetch(`${BACKEND}/claim/info?token=${encodeURIComponent(token)}`);
-    const d = await r.json();
-    if (!d.ok) { show('invalid'); $('invalid').querySelector('.err').textContent=d.error||'Invalid link.'; return; }
+    const d = await (await fetch(`${BACKEND}/claim/info?token=${encodeURIComponent(token)}`)).json();
+    if (!d.ok) return badLink(d.error || 'Invalid link.');
     account = d.account;
-    $('account').textContent = account;
-    if (d.alreadyClaimed) { show('invalid'); $('invalid').querySelector('.err').textContent='This wallet is already self-custodied.'; return; }
-    show('form');
-  } catch { show('invalid'); $('invalid').querySelector('.err').textContent='Could not reach SAGE. Try again.'; }
+    if (d.hasKeystore) {
+      $('intro').textContent = 'Enter your password to export your private key. It’s decrypted right here in your browser — SAGE never sees it.';
+      $('accountU').textContent = account; show('unlock');
+    } else {
+      $('intro').textContent = 'Set a password to take full self-custody. Your key is generated here in your browser and encrypted with your password — SAGE never sees either.';
+      $('accountS').textContent = account; show('setup');
+    }
+  } catch { badLink('Could not reach SAGE. Try again.'); }
 })();
+function badLink(m){ show('invalid'); $('invalid').querySelector('.err').textContent=m; }
 
-function downloadKeystore(json){
-  const blob = new Blob([json], {type:'application/json'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `sage-wallet-${account.slice(0,8)}.json`;
-  a.click();
-}
-
+// ── SETUP ──
 $('gen').onclick = async () => {
-  const pw = $('pw').value, pw2 = $('pw2').value;
-  $('pwErr').classList.add('hidden');
+  const pw=$('pw').value, pw2=$('pw2').value; $('pwErr').classList.add('hidden');
   if (pw.length < 8) return fail($('pwErr'),'Password must be at least 8 characters.');
   if (pw !== pw2) return fail($('pwErr'),'Passwords do not match.');
-  $('gen').disabled = true; $('gen').textContent = 'Generating & encrypting…';
+  $('gen').disabled=true; $('gen').textContent='Generating & encrypting…';
   try {
-    const wallet = ethers.Wallet.createRandom();
-    const keystore = await wallet.encrypt(pw); // scrypt, client-side
-    generated = { address: wallet.address, pk: wallet.privateKey, keystore };
-    $('pk').textContent = wallet.privateKey;
-    downloadKeystore(keystore);
-    show('backup');
-  } catch (e) {
-    $('gen').disabled = false; $('gen').textContent = 'Generate my key';
-    fail($('pwErr'), 'Something went wrong generating your key. Try again.');
-  }
+    const w = ethers.Wallet.createRandom();
+    const keystore = await w.encrypt(pw);
+    generated = { address:w.address, pk:w.privateKey, keystore };
+    $('pk').textContent = w.privateKey; dl(keystore); show('backup');
+  } catch { $('gen').disabled=false; $('gen').textContent='Set password & secure wallet'; fail($('pwErr'),'Something went wrong. Try again.'); }
 };
-
 $('saved').onchange = e => { $('finish').disabled = !e.target.checked; };
 $('copyPk').onclick = () => { navigator.clipboard.writeText(generated.pk); $('copyPk').textContent='Copied ✓'; };
-$('dl2').onclick = () => downloadKeystore(generated.keystore);
-
+$('dl2').onclick = () => dl(generated.keystore);
 $('finish').onclick = async () => {
-  $('finish').disabled = true; $('finish').textContent = 'Transferring ownership…'; $('finErr').classList.add('hidden');
+  $('finish').disabled=true; $('finish').textContent='Transferring ownership…'; $('finErr').classList.add('hidden');
   try {
-    const r = await fetch(`${BACKEND}/claim/complete`, {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ token, owner: generated.address })
-    });
-    const d = await r.json();
+    const d = await (await fetch(`${BACKEND}/claim/complete`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,owner:generated.address,keystore:generated.keystore})})).json();
     if (!d.ok) throw new Error(d.error||'Failed');
-    $('txlink').innerHTML = `Owner: ${generated.address}<br><a href="${d.explorer}" target="_blank">View transaction ↗</a>`;
-    show('done');
-  } catch (e) {
-    $('finish').disabled = false; $('finish').textContent = 'Take full ownership';
-    fail($('finErr'), e.message || 'Transfer failed — try again.');
+    $('txlink').innerHTML=`Owner: ${generated.address}<br><a href="${d.explorer}" target="_blank">View transaction ↗</a>`; show('done');
+  } catch(e){ $('finish').disabled=false; $('finish').textContent='Take full ownership'; fail($('finErr'),e.message||'Transfer failed — try again.'); }
+};
+
+// ── UNLOCK / EXPORT ──
+$('unlockBtn').onclick = async () => {
+  const pw=$('upw').value; $('uErr').classList.add('hidden');
+  if (!pw) return fail($('uErr'),'Enter your password.');
+  $('unlockBtn').disabled=true; $('unlockBtn').textContent='Unlocking…';
+  try {
+    const d = await (await fetch(`${BACKEND}/vault/get`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token})})).json();
+    if (!d.ok) throw new Error(d.error||'Could not fetch your key.');
+    const w = await ethers.Wallet.fromEncryptedJson(d.keystore, pw); // wrong pw throws
+    generated = { keystore:d.keystore, pk:w.privateKey };
+    $('pkOut').textContent = w.privateKey; show('exported');
+  } catch(e){
+    $('unlockBtn').disabled=false; $('unlockBtn').textContent='Unlock & show my key';
+    fail($('uErr'), /password/i.test(e.message) ? 'Wrong password.' : (e.message||'Failed.'));
   }
 };
+$('copyPk2').onclick = () => { navigator.clipboard.writeText(generated.pk); $('copyPk2').textContent='Copied ✓'; };
+$('dlExport').onclick = () => dl(generated.keystore);
 </script>
 </body>
 </html>
