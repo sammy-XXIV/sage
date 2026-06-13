@@ -47,6 +47,21 @@
   .ai-label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-weight:700;}
   .ai-live{font-size:11px;color:var(--muted);margin-left:auto;}
   .ai-text{font-size:15px;line-height:1.6;color:#eef2e0;font-weight:500;}
+  .cop{background:var(--glass);border:1px solid var(--border);border-radius:16px;padding:18px 20px;margin-bottom:26px;}
+  .cop-head{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
+  .chips{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px;}
+  .chip{font-size:12px;color:var(--mid);background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:20px;padding:6px 12px;cursor:pointer;}
+  .chip:hover{color:#fff;border-color:var(--lime);}
+  .cop-thread{display:flex;flex-direction:column;gap:10px;margin-bottom:12px;}
+  .cop-thread:empty{display:none;}
+  .msg{max-width:88%;padding:10px 13px;border-radius:12px;font-size:14px;line-height:1.5;}
+  .msg.q{align-self:flex-end;background:var(--lime);color:#000;font-weight:600;border-bottom-right-radius:4px;}
+  .msg.a{align-self:flex-start;background:rgba(255,255,255,.05);color:#eef2e0;border:1px solid var(--border);border-bottom-left-radius:4px;}
+  .msg.a.think{color:var(--muted);font-style:italic;}
+  .cop-input{display:flex;gap:8px;}
+  .cop-input input{flex:1;padding:12px 14px;border-radius:10px;border:1px solid var(--border);background:#0e1109;color:#fff;font-size:14px;font-family:inherit;}
+  .cop-input button{padding:0 18px;border:none;border-radius:10px;background:var(--lime);color:#000;font-weight:700;cursor:pointer;}
+  .cop-input button:disabled{opacity:.4;}
   @media(max-width:560px){ thead th:nth-child(3),tbody td:nth-child(3){display:none;} .stat .v{font-size:24px;} }
 </style>
 </head>
@@ -69,6 +84,21 @@
   <div class="ai-card">
     <div class="ai-head"><span class="ai-badge">✦ SAGE AI</span><span class="ai-label">Market read</span><span class="ai-live" id="aiLive"></span></div>
     <p class="ai-text" id="aiText">SAGE is analyzing the live pools…</p>
+  </div>
+
+  <div class="cop">
+    <div class="cop-head"><span class="ai-badge">✦ SAGE</span><span class="ai-label">Copilot — ask about the markets</span></div>
+    <div class="chips" id="chips">
+      <span class="chip">Which pool has the best liquidity?</span>
+      <span class="chip">Is AMD a buy right now?</span>
+      <span class="chip">Where's the highest slippage risk?</span>
+      <span class="chip">What's the biggest mover today?</span>
+    </div>
+    <div class="cop-thread" id="thread"></div>
+    <div class="cop-input">
+      <input id="q" placeholder="Ask SAGE anything about the markets…" autocomplete="off" />
+      <button id="send">Ask</button>
+    </div>
   </div>
 
   <h2>Markets</h2>
@@ -126,6 +156,24 @@ async function loadAI(){
     }
   }catch(e){ document.getElementById('aiText').textContent = 'SAGE’s market read is unavailable right now.'; }
 }
+
+// ── Copilot ──
+const thread = document.getElementById('thread');
+function addMsg(text, cls){ const d=document.createElement('div'); d.className='msg '+cls; d.textContent=text; thread.appendChild(d); d.scrollIntoView({block:'nearest'}); return d; }
+async function ask(q){
+  q=(q||'').trim(); if(!q) return;
+  addMsg(q,'q'); document.getElementById('q').value='';
+  const think=addMsg('SAGE is thinking…','a think');
+  document.getElementById('send').disabled=true;
+  try{
+    const d=await (await fetch(`${BACKEND}/analytics/ask`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:q})})).json();
+    think.remove(); addMsg(d.ok?d.answer:(d.error||'Try again.'),'a');
+  }catch(e){ think.remove(); addMsg('Couldn’t reach SAGE — try again.','a'); }
+  document.getElementById('send').disabled=false;
+}
+document.getElementById('send').onclick=()=>ask(document.getElementById('q').value);
+document.getElementById('q').addEventListener('keydown',e=>{ if(e.key==='Enter') ask(document.getElementById('q').value); });
+document.querySelectorAll('#chips .chip').forEach(c=>c.onclick=()=>ask(c.textContent));
 
 load(); loadAI();
 setInterval(load, 20000);
