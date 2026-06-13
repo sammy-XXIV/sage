@@ -41,6 +41,12 @@
   .mono{font-family:ui-monospace,Menlo,monospace;font-size:11px;}
   .upd{font-size:11px;color:var(--muted);margin-top:6px;}
   .err{color:var(--red);padding:30px;text-align:center;}
+  .ai-card{background:linear-gradient(135deg,rgba(200,241,53,.07),rgba(255,255,255,.02));border:1px solid rgba(200,241,53,.22);border-radius:16px;padding:20px 22px;margin-bottom:26px;}
+  .ai-head{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+  .ai-badge{font-size:11px;font-weight:800;color:#000;background:var(--lime);padding:4px 9px;border-radius:7px;letter-spacing:.3px;}
+  .ai-label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-weight:700;}
+  .ai-live{font-size:11px;color:var(--muted);margin-left:auto;}
+  .ai-text{font-size:15px;line-height:1.6;color:#eef2e0;font-weight:500;}
   @media(max-width:560px){ thead th:nth-child(3),tbody td:nth-child(3){display:none;} .stat .v{font-size:24px;} }
 </style>
 </head>
@@ -58,6 +64,11 @@
     <div class="stat"><div class="k">Total Value Locked</div><div class="v lime" id="tvl">—</div></div>
     <div class="stat"><div class="k">Live Pairs</div><div class="v" id="pairs">—</div></div>
     <div class="stat"><div class="k">Network</div><div class="v" style="font-size:20px;">Robinhood Chain</div><div class="upd">Arbitrum Orbit · 46630</div></div>
+  </div>
+
+  <div class="ai-card">
+    <div class="ai-head"><span class="ai-badge">✦ SAGE AI</span><span class="ai-label">Market read</span><span class="ai-live" id="aiLive"></span></div>
+    <p class="ai-text" id="aiText">SAGE is analyzing the live pools…</p>
   </div>
 
   <h2>Markets</h2>
@@ -106,7 +117,19 @@ async function load(){
     document.getElementById('rows').innerHTML = `<tr><td colspan="5" class="err">Couldn't load analytics. Retrying…</td></tr>`;
   }
 }
-load(); setInterval(load, 20000);
+async function loadAI(){
+  try{
+    const d = await (await fetch(`${BACKEND}/analytics/ai`)).json();
+    if(d.ok && d.analysis){
+      document.getElementById('aiText').textContent = d.analysis;
+      document.getElementById('aiLive').textContent = 'generated ' + new Date(d.generatedAt).toLocaleTimeString();
+    }
+  }catch(e){ document.getElementById('aiText').textContent = 'SAGE’s market read is unavailable right now.'; }
+}
+
+load(); loadAI();
+setInterval(load, 20000);
+setInterval(loadAI, 180000); // AI read refreshes every 3 min (server-cached)
 </script>
 </body>
 </html>
