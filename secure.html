@@ -49,26 +49,14 @@
     <div class="warn">⚠️ There is no password reset. Lose this password and you lose the ability to withdraw or export — exactly like any self-custodial wallet. SAGE can still trade for you, but cannot recover it.</div>
   </div>
 
-  <!-- BACKUP: after key generated, before ownership transfers -->
-  <div id="backup" class="step hidden">
-    <label>✅ Recovery file downloaded</label>
-    <p class="sub">Keep the downloaded keystore file safe. You can also copy your private key now:</p>
-    <div class="mono" id="pk"></div>
-    <button class="ghost" id="copyPk">Copy private key</button>
-    <button class="ghost" id="dl2">Re-download recovery file</button>
-    <div class="row"><input type="checkbox" id="saved" /><label for="saved" style="margin:0;">I've safely saved my password and recovery file. I understand they can't be recovered.</label></div>
-    <button id="finish" disabled>Take full ownership</button>
-    <p class="err hidden" id="finErr"></p>
-  </div>
-
-  <!-- UNLOCK: already secured, enter password to export -->
+  <!-- UNLOCK: already secured, enter password to withdraw or export -->
   <div id="unlock" class="step hidden">
     <label>Your wallet</label>
     <div class="mono" id="accountU"></div>
     <label>Enter your password</label>
     <input id="upw" type="password" placeholder="Your password" autocomplete="current-password" />
     <p class="err hidden" id="uErr"></p>
-    <button id="unlockBtn">Unlock & show my key</button>
+    <button id="unlockBtn">Unlock</button>
   </div>
 
   <!-- UNLOCKED: withdraw and/or export -->
@@ -110,7 +98,7 @@ const BACKEND = 'https://sage-rh-backend-production.up.railway.app';
 const token = new URLSearchParams(location.search).get('t');
 let generated = null, account = null;
 const $ = id => document.getElementById(id);
-function show(id){ ['loading','invalid','setup','backup','unlock','exported','done'].forEach(s=>$(s).classList.toggle('hidden', s!==id)); }
+function show(id){ ['loading','invalid','setup','unlock','exported','done'].forEach(s=>$(s).classList.toggle('hidden', s!==id)); }
 function fail(el,msg){ el.textContent=msg; el.classList.remove('hidden'); }
 function dl(json){ const b=new Blob([json],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=`sage-wallet-${account.slice(0,8)}.json`; a.click(); }
 
@@ -121,39 +109,32 @@ function dl(json){ const b=new Blob([json],{type:'application/json'}); const a=d
     if (!d.ok) return badLink(d.error || 'Invalid link.');
     account = d.account;
     if (d.hasKeystore) {
-      $('intro').textContent = 'Enter your password to export your private key. It’s decrypted right here in your browser — SAGE never sees it.';
+      $('intro').textContent = 'Enter your password to withdraw, or to export your private key. Everything is decrypted right here in your browser — SAGE never sees your password or key.';
       $('accountU').textContent = account; show('unlock');
     } else {
-      $('intro').textContent = 'Set a password to take full self-custody. Your key is generated here in your browser and encrypted with your password — SAGE never sees either.';
+      $('intro').textContent = 'Set a password to secure your wallet. A key is generated here in your browser and encrypted with your password — SAGE never sees either. You\'ll enter this password later to withdraw or export.';
       $('accountS').textContent = account; show('setup');
     }
   } catch { badLink('Could not reach SAGE. Try again.'); }
 })();
 function badLink(m){ show('invalid'); $('invalid').querySelector('.err').textContent=m; }
 
-// ── SETUP ──
+// ── SETUP — set password & secure. Key is generated + encrypted in-browser and
+// stored as ciphertext; it is NEVER shown here. The key only appears on export,
+// which requires this password.
 $('gen').onclick = async () => {
   const pw=$('pw').value, pw2=$('pw2').value; $('pwErr').classList.add('hidden');
   if (pw.length < 8) return fail($('pwErr'),'Password must be at least 8 characters.');
   if (pw !== pw2) return fail($('pwErr'),'Passwords do not match.');
-  $('gen').disabled=true; $('gen').textContent='Generating & encrypting…';
+  $('gen').disabled=true; $('gen').textContent='Securing…';
   try {
     const w = ethers.Wallet.createRandom();
-    const keystore = await w.encrypt(pw);
-    generated = { address:w.address, pk:w.privateKey, keystore };
-    $('pk').textContent = w.privateKey; dl(keystore); show('backup');
-  } catch { $('gen').disabled=false; $('gen').textContent='Set password & secure wallet'; fail($('pwErr'),'Something went wrong. Try again.'); }
-};
-$('saved').onchange = e => { $('finish').disabled = !e.target.checked; };
-$('copyPk').onclick = () => { navigator.clipboard.writeText(generated.pk); $('copyPk').textContent='Copied ✓'; };
-$('dl2').onclick = () => dl(generated.keystore);
-$('finish').onclick = async () => {
-  $('finish').disabled=true; $('finish').textContent='Transferring ownership…'; $('finErr').classList.add('hidden');
-  try {
-    const d = await (await fetch(`${BACKEND}/claim/complete`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,owner:generated.address,keystore:generated.keystore})})).json();
+    const keystore = await w.encrypt(pw); // encrypted with the password, locally
+    const d = await (await fetch(`${BACKEND}/claim/complete`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,owner:w.address,keystore})})).json();
     if (!d.ok) throw new Error(d.error||'Failed');
-    $('txlink').innerHTML=`Owner: ${generated.address}<br><a href="${d.explorer}" target="_blank">View transaction ↗</a>`; show('done');
-  } catch(e){ $('finish').disabled=false; $('finish').textContent='Take full ownership'; fail($('finErr'),e.message||'Transfer failed — try again.'); }
+    $('txlink').innerHTML=`<a href="${d.explorer}" target="_blank">View transaction ↗</a>`;
+    show('done');
+  } catch(e){ $('gen').disabled=false; $('gen').textContent='Set password & secure wallet'; fail($('pwErr'), e.message||'Something went wrong. Try again.'); }
 };
 
 // ── UNLOCK / EXPORT ──
